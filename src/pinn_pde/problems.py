@@ -11,19 +11,26 @@ TensorFn = Callable[[torch.Tensor, torch.nn.Module], torch.Tensor]
 
 def gradient(y: torch.Tensor, x: torch.Tensor) -> torch.Tensor:
     """Return dy/dx for batched scalar outputs."""
-    return torch.autograd.grad(
+    if not y.requires_grad:
+        return torch.zeros_like(x)
+    grad = torch.autograd.grad(
         y,
         x,
         grad_outputs=torch.ones_like(y),
         create_graph=True,
         retain_graph=True,
+        allow_unused=True,
+        materialize_grads=True,
     )[0]
+    return torch.zeros_like(x) if grad is None else grad
 
 
 def derivative(y: torch.Tensor, x: torch.Tensor, component: int = 0, order: int = 1) -> torch.Tensor:
     """Return a selected partial derivative of a scalar field."""
     value = y
     for _ in range(order):
+        if not value.requires_grad:
+            return torch.zeros((x.shape[0], 1), device=x.device, dtype=x.dtype)
         value = gradient(value, x)[:, component : component + 1]
     return value
 
