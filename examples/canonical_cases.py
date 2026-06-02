@@ -14,6 +14,43 @@ from pinn_pde.training import sample_boundary_1d, sample_grid_1d, sample_interio
 
 
 Potential = Callable[[torch.Tensor], torch.Tensor]
+FIGSIZE = (7.2, 4.4)
+COLORS = {
+    "primary": "#1f77b4",
+    "secondary": "#d62728",
+    "accent": "#2ca02c",
+    "muted": "#6b7280",
+}
+
+
+def set_publication_style() -> None:
+    plt.rcParams.update(
+        {
+            "figure.dpi": 160,
+            "savefig.dpi": 300,
+            "font.size": 10,
+            "axes.labelsize": 11,
+            "axes.titlesize": 12,
+            "legend.fontsize": 9,
+            "lines.linewidth": 2.0,
+            "axes.spines.top": False,
+            "axes.spines.right": False,
+            "axes.grid": True,
+            "grid.alpha": 0.22,
+            "grid.linewidth": 0.7,
+        }
+    )
+
+
+def save_figure(fig: plt.Figure, output: Path, formats: tuple[str, ...]) -> list[Path]:
+    output.parent.mkdir(parents=True, exist_ok=True)
+    written = []
+    for fmt in formats:
+        path = output.with_suffix(f".{fmt}")
+        fig.savefig(path, bbox_inches="tight", transparent=False)
+        written.append(path)
+    plt.close(fig)
+    return written
 
 
 def potential(name: str) -> Potential:
@@ -143,7 +180,8 @@ def make_schrodinger_trainer(potential_name: str = "harmonic", device: str = "cp
     return Trainer(model, loss, batches, lr=1e-3)
 
 
-def train_case(name: str, steps: int, device: str = "cpu", potential_name: str = "harmonic") -> Trainer:
+def train_case(name: str, steps: int, device: str = "cpu", potential_name: str = "harmonic", seed: int = 7) -> Trainer:
+    torch.manual_seed(seed)
     makers = {
         "poisson": make_poisson_trainer,
         "heat": make_heat_trainer,
@@ -154,8 +192,14 @@ def train_case(name: str, steps: int, device: str = "cpu", potential_name: str =
     return trainer
 
 
-def plot_case(name: str, trainer: Trainer, output: Path, potential_name: str = "harmonic") -> Path:
-    output.parent.mkdir(parents=True, exist_ok=True)
+def plot_case(
+    name: str,
+    trainer: Trainer,
+    output: Path,
+    potential_name: str = "harmonic",
+    formats: tuple[str, ...] = ("png",),
+) -> list[Path]:
+    set_publication_style()
     trainer.model.eval()
     with torch.no_grad():
         if name in {"heat", "advection_diffusion"}:
@@ -164,33 +208,50 @@ def plot_case(name: str, trainer: Trainer, output: Path, potential_name: str = "
             t1 = torch.full_like(x, 1.0 if name == "heat" else 0.5)
             y0 = trainer.model(torch.cat([x, t0], dim=1)).cpu()
             y1 = trainer.model(torch.cat([x, t1], dim=1)).cpu()
-            plt.figure(figsize=(6, 3.5))
-            plt.plot(x.cpu(), y0, label="t=0")
-            plt.plot(x.cpu(), y1, label=f"t={float(t1[0]):.1f}")
-            plt.xlabel("x")
-            plt.ylabel("u")
-            plt.legend()
+            fig, (ax, loss_ax) = plt.subplots(1, 2, figsize=(9.0, 3.8), constrained_layout=True)
+            ax.plot(x.cpu(), y0, color=COLORS["muted"], label="initial")
+            ax.plot(x.cpu(), y1, color=COLORS["primary"], label=f"PINN, t={float(t1[0]):.1f}")
+            if name == "heat":
+                exact = torch.exp(-0.05 * torch.pi**2 * t1) * torch.sin(torch.pi * x)
+                ax.plot(x.cpu(), exact.cpu(), "--", color=COLORS["secondary"], label="exact")
+            ax.set_xlabel("x")
+            ax.set_ylabel("u(x,t)")
+            ax.legend(frameon=False)
+            history = [item["loss"] for item in trainer.history]
+            loss_ax.semilogy(range(1, len(history) + 1), history, color=COLORS["accent"])
+            loss_ax.set_xlabel("training step")
+            loss_ax.set_ylabel("total loss")
+            loss_ax.set_title("Optimization Trace")
         else:
             bounds = (0.0, 1.0) if name == "poisson" else (-4.0, 4.0)
             x = torch.linspace(*bounds, 240).reshape(-1, 1)
             y = trainer.model(x).cpu()
-            plt.figure(figsize=(6, 3.5))
-            plt.plot(x.cpu(), y, label="PINN")
+            fig, axes = plt.subplots(1, 2, figsize=(9.0, 3.8), constrained_layout=True)
+            axes[0].plot(x.cpu(), y, color=COLORS["primary"], label="PINN")
             if name == "poisson":
-                plt.plot(x.cpu(), torch.sin(torch.pi * x).cpu(), "--", label="exact")
+                exact = torch.sin(torch.pi * x).cpu()
+                axes[0].plot(x.cpu(), exact, "--", color=COLORS["secondary"], label="exact")
+                axes[1].plot(x.cpu(), torch.abs(y - exact), color=COLORS["accent"])
+                axes[1].set_ylabel("|error|")
+                axes[1].set_title("Pointwise Error")
             if name == "schrodinger":
-                scaled_v = potential(potential_name)(x).cpu()
-                scaled_v = scaled_v / torch.max(torch.abs(scaled_v)).clamp_min(1e-8) * torch.max(torch.abs(y)).clamp_min(1e-8)
-                plt.plot(x.cpu(), scaled_v, ":", label=f"{potential_name} potential")
-            plt.xlabel("x")
-            plt.ylabel("field")
-            plt.legend()
+                v = potential(potential_name)(x).cpu()
+                twin = axes[0].twinx()
+                twin.spines["right"].set_visible(True)
+                twin.plot(x.cpu(), v, ":", color=COLORS["secondary"], label="potential")
+                twin.set_ylabel("V(x)")
+                axes[1].plot(x.cpu(), y.square(), color=COLORS["accent"])
+                axes[1].set_ylabel(r"$|\psi(x)|^2$")
+                axes[1].set_title("Probability Density")
+                energy = trainer.model.scalars["energy"].detach().cpu().item()
+                axes[0].text(0.03, 0.92, f"E = {energy:.3f}", transform=axes[0].transAxes)
+            axes[0].set_xlabel("x")
+            axes[0].set_ylabel("field")
+            axes[0].legend(frameon=False)
+            axes[1].set_xlabel("x")
     title = f"Schrodinger: {potential_name.replace('_', ' ').title()}" if name == "schrodinger" else name.replace("_", " ").title()
-    plt.title(title)
-    plt.tight_layout()
-    plt.savefig(output, dpi=160)
-    plt.close()
-    return output
+    fig.suptitle(title, y=1.03)
+    return save_figure(fig, output, formats)
 
 
 def main() -> None:
@@ -199,12 +260,14 @@ def main() -> None:
     parser.add_argument("--potential", default="harmonic", choices=["harmonic", "finite_well", "double_well", "periodic", "morse"])
     parser.add_argument("--steps", type=int, default=500)
     parser.add_argument("--output-dir", type=Path, default=Path("outputs"))
+    parser.add_argument("--formats", nargs="+", default=["png", "pdf"], choices=["png", "pdf", "svg"])
+    parser.add_argument("--seed", type=int, default=7)
     args = parser.parse_args()
 
-    trainer = train_case(args.case, args.steps, potential_name=args.potential)
+    trainer = train_case(args.case, args.steps, potential_name=args.potential, seed=args.seed)
     stem = args.case if args.case != "schrodinger" else f"schrodinger_{args.potential}"
-    path = plot_case(args.case, trainer, args.output_dir / f"{stem}.png", potential_name=args.potential)
-    print(f"saved {path}")
+    paths = plot_case(args.case, trainer, args.output_dir / stem, potential_name=args.potential, formats=tuple(args.formats))
+    print("saved " + ", ".join(str(path) for path in paths))
 
 
 if __name__ == "__main__":

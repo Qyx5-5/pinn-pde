@@ -83,10 +83,10 @@ def test_schrodinger_potential_catalog_shapes():
 def test_plot_case_writes_png(tmp_path: Path):
     trainer = make_poisson_trainer()
     trainer.fit(2)
-    output = plot_case("poisson", trainer, tmp_path / "poisson.png")
+    outputs = plot_case("poisson", trainer, tmp_path / "poisson", formats=("png", "pdf"))
 
-    assert output.exists()
-    assert output.stat().st_size > 0
+    assert {path.suffix for path in outputs} == {".png", ".pdf"}
+    assert all(path.exists() and path.stat().st_size > 0 for path in outputs)
 
 
 def test_schrodinger_trainer_accepts_all_potentials():

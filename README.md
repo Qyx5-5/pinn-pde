@@ -57,7 +57,7 @@ python examples/canonical_cases.py advection_diffusion --steps 500
 python examples/canonical_cases.py schrodinger --potential double_well --steps 500
 ```
 
-The canonical cases save plots under `outputs/`, which is ignored by Git.
+The canonical cases save publication-style PNG/PDF figures under `outputs/`, which is ignored by Git. Use `--formats png pdf svg` to choose output formats. For PINN figures intended for reports, increase `--steps`, keep `--seed` fixed, and verify the loss/error panels before using the figure.
 
 ## Tests
 
