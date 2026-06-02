@@ -10,6 +10,7 @@ dist/
 *.pt
 *.pth
 *.png
+!docs/figures/*.png
 *.gif
 *.mp4
 .DS_Store

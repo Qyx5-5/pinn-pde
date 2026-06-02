@@ -46,7 +46,29 @@ examples/         concrete PDE cases such as Schrodinger and Burgers
 tests/            lightweight correctness and smoke tests
 ```
 
-## Examples
+## Canonical Figures
+
+These examples show how a PINN uses neural-network derivatives to satisfy a PDE residual plus boundary/initial constraints.
+
+### Poisson: residual learning with a known answer
+
+![Poisson PINN case](docs/figures/poisson.png)
+
+The left panel compares the PINN solution with the exact solution. The right panel shows pointwise error. This is the simplest check that the residual and boundary losses are wired correctly.
+
+### Heat: time-dependent diffusion
+
+![Heat PINN case](docs/figures/heat.png)
+
+The solution should smooth/decay over time. The right panel shows the optimization trace, so new runs should be judged by both the curve shape and whether the loss actually converges.
+
+### Schrodinger: eigenstate with physical reference
+
+![Schrodinger PINN case](docs/figures/schrodinger_harmonic.png)
+
+The learned wavefunction is compared with a finite-difference reference. The energy and probability-density panels are the main physical checks; a visually smooth wavefunction is not enough.
+
+## Run Examples
 
 ```bash
 python examples/schrodinger_1d.py
@@ -57,14 +79,7 @@ python examples/canonical_cases.py advection_diffusion --steps 500
 python examples/canonical_cases.py schrodinger --potential double_well --steps 500
 ```
 
-The canonical cases save publication-style PNG/PDF figures under `outputs/`, which is ignored by Git. Use `--formats png pdf svg` to choose output formats. For PINN figures intended for reports, increase `--steps`, keep `--seed` fixed, and verify the loss/error panels before using the figure.
-
-Canonical figures are designed as field-entry case studies:
-
-- Poisson: elliptic residual learning with an exact solution and pointwise error.
-- Heat: parabolic time evolution with exact sine-mode decay and optimization trace.
-- Advection-diffusion: transport plus smoothing from a localized pulse.
-- Schrodinger: stationary eigenproblem with normalization and a finite-difference reference for energy, wavefunction scale, and probability density.
+Generated figures are saved under `outputs/`, which is ignored by Git. Use `--formats png pdf svg` to choose formats. For report use, increase `--steps`, keep `--seed` fixed, and verify error/loss/reference diagnostics.
 
 ## Tests
 
