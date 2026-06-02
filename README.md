@@ -51,7 +51,13 @@ tests/            lightweight correctness and smoke tests
 ```bash
 python examples/schrodinger_1d.py
 python examples/burgers_1d.py
+python examples/canonical_cases.py poisson --steps 500
+python examples/canonical_cases.py heat --steps 500
+python examples/canonical_cases.py advection_diffusion --steps 500
+python examples/canonical_cases.py schrodinger --potential double_well --steps 500
 ```
+
+The canonical cases save plots under `outputs/`, which is ignored by Git.
 
 ## Tests
 
