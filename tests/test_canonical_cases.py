@@ -10,6 +10,7 @@ from examples.canonical_cases import (
     make_schrodinger_trainer,
     plot_case,
     poisson_residual,
+    finite_difference_schrodinger_reference,
     potential,
     schrodinger_residual,
 )
@@ -80,6 +81,13 @@ def test_schrodinger_potential_catalog_shapes():
         assert potential(name)(points).shape == points.shape
 
 
+def test_harmonic_fd_reference_has_reasonable_ground_energy():
+    _x, psi, energy = finite_difference_schrodinger_reference(potential("harmonic"), points=160)
+
+    assert psi.shape == (160, 1)
+    assert abs(energy - 0.5) < 0.05
+
+
 def test_plot_case_writes_png(tmp_path: Path):
     trainer = make_poisson_trainer()
     trainer.fit(2)
@@ -94,3 +102,4 @@ def test_schrodinger_trainer_accepts_all_potentials():
         trainer = make_schrodinger_trainer(name)
         record = trainer.step()
         assert record["loss"] >= 0.0
+        assert "normalization" in record

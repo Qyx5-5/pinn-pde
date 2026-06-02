@@ -53,6 +53,42 @@ def save_figure(fig: plt.Figure, output: Path, formats: tuple[str, ...]) -> list
     return written
 
 
+def caption(ax: plt.Axes, text: str) -> None:
+    ax.figure.text(
+        0.08,
+        0.045,
+        text,
+        ha="left",
+        va="bottom",
+        fontsize=8.0,
+        color="#374151",
+        wrap=True,
+    )
+
+
+def two_panel_figure() -> tuple[plt.Figure, tuple[plt.Axes, plt.Axes]]:
+    fig, axes = plt.subplots(1, 2, figsize=(8.2, 3.8), constrained_layout=False)
+    fig.subplots_adjust(left=0.08, right=0.92, top=0.82, bottom=0.24, wspace=0.42)
+    return fig, axes
+
+
+def finite_difference_schrodinger_reference(
+    potential_fn: Potential,
+    bounds: tuple[float, float] = (-4.0, 4.0),
+    points: int = 400,
+) -> tuple[torch.Tensor, torch.Tensor, float]:
+    x = torch.linspace(*bounds, points).reshape(-1, 1)
+    dx = float(x[1] - x[0])
+    v = potential_fn(x).reshape(-1)
+    diagonal = torch.full((points,), 1.0 / dx**2) + v
+    off = torch.full((points - 1,), -0.5 / dx**2)
+    hamiltonian = torch.diag(diagonal) + torch.diag(off, 1) + torch.diag(off, -1)
+    eigvals, eigvecs = torch.linalg.eigh(hamiltonian)
+    psi = eigvecs[:, 0:1]
+    psi = psi / torch.sqrt(torch.sum(psi.square()) * dx)
+    return x, psi, float(eigvals[0])
+
+
 def potential(name: str) -> Potential:
     if name == "harmonic":
         return lambda x: 0.5 * x.square()
@@ -95,6 +131,18 @@ def schrodinger_residual(points: torch.Tensor, model: MLP, potential_fn: Potenti
     psi = model(points)
     energy = model.scalars["energy"]
     return -0.5 * laplacian(psi, points) + potential_fn(points) * psi - energy * psi
+
+
+class SchrodingerNormalizationLoss:
+    def __init__(self, domain: tuple[float, float], weight: float = 10.0) -> None:
+        self.domain = domain
+        self.weight = weight
+
+    def __call__(self, model: MLP, points: torch.Tensor) -> torch.Tensor:
+        psi = model(points)
+        length = self.domain[1] - self.domain[0]
+        norm = torch.mean(psi.square()) * length
+        return self.weight * (norm - 1.0).square()
 
 
 def make_poisson_trainer(device: str = "cpu") -> Trainer:
@@ -168,13 +216,22 @@ def make_advection_diffusion_trainer(device: str = "cpu") -> Trainer:
 def make_schrodinger_trainer(potential_name: str = "harmonic", device: str = "cpu") -> Trainer:
     model = MLP(1, hidden_layers=(32, 32), learnable_scalars=("energy",)).to(device)
     potential_fn = potential(potential_name)
+    domain = (-4.0, 4.0)
     problem = PDEProblem(residual=lambda points, net: schrodinger_residual(points, net, potential_fn))
-    loss = CompositeLoss({"residual": ResidualLoss(problem), "boundary": BoundaryLoss(weight=3.0)})
+    loss = CompositeLoss(
+        {
+            "residual": ResidualLoss(problem),
+            "boundary": BoundaryLoss(weight=3.0),
+            "normalization": SchrodingerNormalizationLoss(domain, weight=5.0),
+        }
+    )
 
     def batches() -> dict[str, torch.Tensor]:
+        residual = sample_grid_1d(domain, 128, device)
         return {
-            "residual": sample_grid_1d((-4.0, 4.0), 128, device),
-            "boundary": sample_boundary_1d((-4.0, 4.0), 16, device),
+            "residual": residual,
+            "boundary": sample_boundary_1d(domain, 16, device),
+            "normalization": residual,
         }
 
     return Trainer(model, loss, batches, lr=1e-3)
@@ -208,7 +265,7 @@ def plot_case(
             t1 = torch.full_like(x, 1.0 if name == "heat" else 0.5)
             y0 = trainer.model(torch.cat([x, t0], dim=1)).cpu()
             y1 = trainer.model(torch.cat([x, t1], dim=1)).cpu()
-            fig, (ax, loss_ax) = plt.subplots(1, 2, figsize=(9.0, 3.8), constrained_layout=True)
+            fig, (ax, loss_ax) = two_panel_figure()
             ax.plot(x.cpu(), y0, color=COLORS["muted"], label="initial")
             ax.plot(x.cpu(), y1, color=COLORS["primary"], label=f"PINN, t={float(t1[0]):.1f}")
             if name == "heat":
@@ -222,35 +279,57 @@ def plot_case(
             loss_ax.set_xlabel("training step")
             loss_ax.set_ylabel("total loss")
             loss_ax.set_title("Optimization Trace")
+            if name == "heat":
+                caption(ax, "Heat equation: u_t = 0.05 u_xx, x in [0,1], Dirichlet u=0, initial state sin(pi x).")
+            else:
+                caption(ax, "Advection-diffusion: u_t + u_x = 0.02 u_xx, x in [0,1], localized Gaussian initial pulse.")
         else:
             bounds = (0.0, 1.0) if name == "poisson" else (-4.0, 4.0)
             x = torch.linspace(*bounds, 240).reshape(-1, 1)
             y = trainer.model(x).cpu()
-            fig, axes = plt.subplots(1, 2, figsize=(9.0, 3.8), constrained_layout=True)
-            axes[0].plot(x.cpu(), y, color=COLORS["primary"], label="PINN")
+            fig, axes = two_panel_figure()
             if name == "poisson":
+                axes[0].plot(x.cpu(), y, color=COLORS["primary"], label="PINN")
                 exact = torch.sin(torch.pi * x).cpu()
                 axes[0].plot(x.cpu(), exact, "--", color=COLORS["secondary"], label="exact")
                 axes[1].plot(x.cpu(), torch.abs(y - exact), color=COLORS["accent"])
                 axes[1].set_ylabel("|error|")
                 axes[1].set_title("Pointwise Error")
+                caption(axes[0], "Poisson equation: u_xx = -pi^2 sin(pi x), x in [0,1], u(0)=u(1)=0; exact solution is sin(pi x).")
             if name == "schrodinger":
+                ref_x, ref_psi, ref_energy = finite_difference_schrodinger_reference(potential(potential_name), bounds, points=len(x))
                 v = potential(potential_name)(x).cpu()
+                y_norm = y / torch.sqrt(torch.trapezoid(y.squeeze().square(), x.squeeze()).clamp_min(1e-8))
+                if torch.sum(y_norm.squeeze() * ref_psi.squeeze()) < 0:
+                    ref_psi = -ref_psi
+                axes[0].plot(x.cpu(), y_norm, color=COLORS["primary"], label="PINN")
+                axes[0].plot(ref_x.cpu(), ref_psi.cpu(), "--", color=COLORS["secondary"], label="FD reference")
                 twin = axes[0].twinx()
                 twin.spines["right"].set_visible(True)
-                twin.plot(x.cpu(), v, ":", color=COLORS["secondary"], label="potential")
+                twin.plot(x.cpu(), v, ":", color=COLORS["muted"], label="V(x)")
                 twin.set_ylabel("V(x)")
-                axes[1].plot(x.cpu(), y.square(), color=COLORS["accent"])
+                axes[1].plot(x.cpu(), y_norm.square(), color=COLORS["primary"], label="PINN")
+                axes[1].plot(ref_x.cpu(), ref_psi.square().cpu(), "--", color=COLORS["secondary"], label="FD reference")
                 axes[1].set_ylabel(r"$|\psi(x)|^2$")
                 axes[1].set_title("Probability Density")
                 energy = trainer.model.scalars["energy"].detach().cpu().item()
-                axes[0].text(0.03, 0.92, f"E = {energy:.3f}", transform=axes[0].transAxes)
+                energy_error = abs(energy - ref_energy)
+                axes[0].text(
+                    0.03,
+                    0.92,
+                    f"PINN E = {energy:.3f}\nFD E = {ref_energy:.3f}\n|Delta E| = {energy_error:.3f}",
+                    transform=axes[0].transAxes,
+                    fontsize=8.5,
+                    bbox={"facecolor": "white", "edgecolor": "#d1d5db", "alpha": 0.88},
+                )
+                axes[1].legend(frameon=False)
+                caption(axes[0], "Stationary Schrodinger equation: -0.5 psi_xx + V(x)psi = E psi; FD reference gives physical scale and convergence check.")
             axes[0].set_xlabel("x")
-            axes[0].set_ylabel("field")
+            axes[0].set_ylabel("u(x)" if name == "poisson" else r"$\psi(x)$")
             axes[0].legend(frameon=False)
             axes[1].set_xlabel("x")
     title = f"Schrodinger: {potential_name.replace('_', ' ').title()}" if name == "schrodinger" else name.replace("_", " ").title()
-    fig.suptitle(title, y=1.03)
+    fig.suptitle(title, y=0.95)
     return save_figure(fig, output, formats)
 
 

@@ -59,6 +59,13 @@ python examples/canonical_cases.py schrodinger --potential double_well --steps 5
 
 The canonical cases save publication-style PNG/PDF figures under `outputs/`, which is ignored by Git. Use `--formats png pdf svg` to choose output formats. For PINN figures intended for reports, increase `--steps`, keep `--seed` fixed, and verify the loss/error panels before using the figure.
 
+Canonical figures are designed as field-entry case studies:
+
+- Poisson: elliptic residual learning with an exact solution and pointwise error.
+- Heat: parabolic time evolution with exact sine-mode decay and optimization trace.
+- Advection-diffusion: transport plus smoothing from a localized pulse.
+- Schrodinger: stationary eigenproblem with normalization and a finite-difference reference for energy, wavefunction scale, and probability density.
+
 ## Tests
 
 ```bash
