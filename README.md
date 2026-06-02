@@ -54,19 +54,19 @@ These examples show how a PINN uses neural-network derivatives to satisfy a PDE 
 
 ![Poisson PINN case](docs/figures/poisson.png)
 
-The left panel compares the PINN solution with the exact solution. The right panel shows pointwise error. This is the simplest check that the residual and boundary losses are wired correctly.
+The case solves $u_{xx}=-\pi^2\sin(\pi x)$ on $x\in[0,1]$ with $u(0)=u(1)=0$. The left panel compares the PINN solution with the exact solution $u(x)=\sin(\pi x)$; the right panel shows pointwise error.
 
 ### Heat: time-dependent diffusion
 
 ![Heat PINN case](docs/figures/heat.png)
 
-The solution should smooth/decay over time. The right panel shows the optimization trace, so new runs should be judged by both the curve shape and whether the loss actually converges.
+The case solves $u_t=\nu u_{xx}$ with $\nu=0.05$ and initial condition $u(x,0)=\sin(\pi x)$. The solution should decay smoothly; the right panel shows whether the PINN loss converges.
 
 ### Schrodinger: eigenstate with physical reference
 
 ![Schrodinger PINN case](docs/figures/schrodinger_harmonic.png)
 
-The learned wavefunction is compared with a finite-difference reference. The energy and probability-density panels are the main physical checks; a visually smooth wavefunction is not enough.
+The case solves the stationary Schrodinger eigenproblem $-\frac{1}{2}\psi_{xx}+V(x)\psi=E\psi$ for the harmonic potential $V(x)=\frac{1}{2}x^2$. The figure compares $\psi(x)$, $|\psi(x)|^2$, and $E$ against a finite-difference reference.
 
 ## Run Examples
 

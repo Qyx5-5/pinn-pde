@@ -271,8 +271,8 @@ def plot_case(
             if name == "heat":
                 exact = torch.exp(-0.05 * torch.pi**2 * t1) * torch.sin(torch.pi * x)
                 ax.plot(x.cpu(), exact.cpu(), "--", color=COLORS["secondary"], label="exact")
-            ax.set_xlabel("x")
-            ax.set_ylabel("u(x,t)")
+            ax.set_xlabel(r"$x$")
+            ax.set_ylabel(r"$u(x,t)$")
             ax.legend(frameon=False)
             history = [item["loss"] for item in trainer.history]
             loss_ax.semilogy(range(1, len(history) + 1), history, color=COLORS["accent"])
@@ -280,9 +280,9 @@ def plot_case(
             loss_ax.set_ylabel("total loss")
             loss_ax.set_title("Optimization Trace")
             if name == "heat":
-                caption(ax, "Heat equation: u_t = 0.05 u_xx, x in [0,1], Dirichlet u=0, initial state sin(pi x).")
+                caption(ax, r"Heat equation: $u_t=0.05\,u_{xx}$, $x\in[0,1]$, Dirichlet $u=0$, initial state $\sin(\pi x)$.")
             else:
-                caption(ax, "Advection-diffusion: u_t + u_x = 0.02 u_xx, x in [0,1], localized Gaussian initial pulse.")
+                caption(ax, r"Advection-diffusion: $u_t+u_x=0.02\,u_{xx}$, $x\in[0,1]$, localized Gaussian initial pulse.")
         else:
             bounds = (0.0, 1.0) if name == "poisson" else (-4.0, 4.0)
             x = torch.linspace(*bounds, 240).reshape(-1, 1)
@@ -293,9 +293,9 @@ def plot_case(
                 exact = torch.sin(torch.pi * x).cpu()
                 axes[0].plot(x.cpu(), exact, "--", color=COLORS["secondary"], label="exact")
                 axes[1].plot(x.cpu(), torch.abs(y - exact), color=COLORS["accent"])
-                axes[1].set_ylabel("|error|")
+                axes[1].set_ylabel(r"$|u_{\mathrm{PINN}}-u_{\mathrm{exact}}|$")
                 axes[1].set_title("Pointwise Error")
-                caption(axes[0], "Poisson equation: u_xx = -pi^2 sin(pi x), x in [0,1], u(0)=u(1)=0; exact solution is sin(pi x).")
+                caption(axes[0], r"Poisson equation: $u_{xx}=-\pi^2\sin(\pi x)$, $x\in[0,1]$, $u(0)=u(1)=0$; exact solution is $\sin(\pi x)$.")
             if name == "schrodinger":
                 ref_x, ref_psi, ref_energy = finite_difference_schrodinger_reference(potential(potential_name), bounds, points=len(x))
                 v = potential(potential_name)(x).cpu()
@@ -306,8 +306,8 @@ def plot_case(
                 axes[0].plot(ref_x.cpu(), ref_psi.cpu(), "--", color=COLORS["secondary"], label="FD reference")
                 twin = axes[0].twinx()
                 twin.spines["right"].set_visible(True)
-                twin.plot(x.cpu(), v, ":", color=COLORS["muted"], label="V(x)")
-                twin.set_ylabel("V(x)")
+                twin.plot(x.cpu(), v, ":", color=COLORS["muted"], label=r"$V(x)$")
+                twin.set_ylabel(r"$V(x)$")
                 axes[1].plot(x.cpu(), y_norm.square(), color=COLORS["primary"], label="PINN")
                 axes[1].plot(ref_x.cpu(), ref_psi.square().cpu(), "--", color=COLORS["secondary"], label="FD reference")
                 axes[1].set_ylabel(r"$|\psi(x)|^2$")
@@ -315,19 +315,19 @@ def plot_case(
                 energy = trainer.model.scalars["energy"].detach().cpu().item()
                 energy_error = abs(energy - ref_energy)
                 axes[0].text(
-                    0.03,
-                    0.92,
-                    f"PINN E = {energy:.3f}\nFD E = {ref_energy:.3f}\n|Delta E| = {energy_error:.3f}",
+                    0.08,
+                    0.86,
+                    f"PINN: $E={energy:.3f}$\nFD: $E={ref_energy:.3f}$\n$|\\Delta E|={energy_error:.3f}$",
                     transform=axes[0].transAxes,
                     fontsize=8.5,
-                    bbox={"facecolor": "white", "edgecolor": "#d1d5db", "alpha": 0.88},
+                    bbox={"boxstyle": "round,pad=0.35", "facecolor": "white", "edgecolor": "#d1d5db", "alpha": 0.9},
                 )
                 axes[1].legend(frameon=False)
-                caption(axes[0], "Stationary Schrodinger equation: -0.5 psi_xx + V(x)psi = E psi; FD reference gives physical scale and convergence check.")
-            axes[0].set_xlabel("x")
-            axes[0].set_ylabel("u(x)" if name == "poisson" else r"$\psi(x)$")
+                caption(axes[0], r"Stationary Schrodinger equation: $-\frac{1}{2}\psi_{xx}+V(x)\psi=E\psi$; FD reference gives physical scale and convergence check.")
+            axes[0].set_xlabel(r"$x$")
+            axes[0].set_ylabel(r"$u(x)$" if name == "poisson" else r"$\psi(x)$")
             axes[0].legend(frameon=False)
-            axes[1].set_xlabel("x")
+            axes[1].set_xlabel(r"$x$")
     title = f"Schrodinger: {potential_name.replace('_', ' ').title()}" if name == "schrodinger" else name.replace("_", " ").title()
     fig.suptitle(title, y=0.95)
     return save_figure(fig, output, formats)
